@@ -1,138 +1,87 @@
-<!-- mcp-name: io.github.andrecccruz/juris-br-mcp -->
+# juris-br-mcp
 
-<p align="center">
-  <img src="assets/banner.svg" width="800" alt="Juris BR MCP">
-</p>
+Servidor MCP para consulta processual brasileira. Liga o Claude (ou qualquer cliente compatível com o Model Context Protocol) a duas bases públicas do CNJ:
 
-<p align="center">
-  <strong>Conecte qualquer assistente de IA ao DataJud CNJ e ao DJEN - processos, andamentos de todas as instâncias, publicações e intimações, partes, monitoramento e prazos em dias úteis.</strong>
-</p>
+- **DataJud** - dados e andamentos dos processos de 92 tribunais;
+- **DJEN** (Diário de Justiça Eletrônico Nacional) - texto das publicações e intimações, partes e advogados.
 
-<p align="center">
-  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-1a7a4a?logo=python&logoColor=white" alt="Python 3.10+"></a>
-  <a href="https://github.com/andrecccruz/juris-br-mcp/actions/workflows/ci.yml"><img src="https://github.com/andrecccruz/juris-br-mcp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/licenca-MIT-4fc3f7?labelColor=001f5b" alt="Licença MIT"></a>
-  <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-compatível-7c3aed" alt="MCP Compatível"></a>
-</p>
+Com ele, dá para pedir em linguagem natural coisas como *"quais publicações saíram hoje para a OAB 123456/SP?"*, *"traga o andamento do processo 0701300-13.2011.8.26.0020"* ou *"encontre processos em que a empresa X é parte no TRT2"*.
 
-<p align="center">
-  <a href="#o-que-é">O que é</a> ·
-  <a href="#ferramentas-disponíveis">Ferramentas</a> ·
-  <a href="#instalação">Instalação</a> ·
-  <a href="#configuração-por-cliente-mcp">Configuração</a> ·
-  <a href="#roadmap">Roadmap</a> ·
-  <a href="#créditos">Créditos</a>
-</p>
-
-> **Baseado em [mcp-juridico-brasil](https://github.com/DeHor-Labs/mcp-juridico-brasil), de Nikolas de Hor (MIT).** O juris-br-mcp é um projeto independente que parte dele e acrescenta a integração com o DJEN, consolidação das instâncias do DataJud, detecção de respostas parciais do DataJud, validação do dígito verificador CNJ e persistência de monitoramento. Detalhes no [CHANGELOG](CHANGELOG.md).
+Tudo roda na sua máquina, usando apenas APIs públicas e gratuitas. Não há cadastro nem chave para obter.
 
 ---
 
-## O que é
+## O que ele faz
 
-`juris-br-mcp` conecta assistentes de IA, escritórios de advocacia e sistemas de gestão processual a duas fontes públicas do CNJ:
+**Processos (DataJud + DJEN)**
 
-- **DataJud** - base unificada de dados judiciais, com **92 siglas de tribunais cadastradas** em todas as justiças (Federal, Estadual, do Trabalho, Militar, Eleitoral e Superior). Traz metadados e movimentações. Estar cadastrado não garante que o DataJud tenha dados daquele tribunal: o volume depende do que cada tribunal envia ao CNJ.
-- **DJEN** (Diário de Justiça Eletrônico Nacional) - traz o **texto** das publicações e intimações, as **partes** e os **advogados com OAB**, que o DataJud não fornece.
+- `buscar_processo_por_numero` - dados completos do processo a partir do número CNJ. Reúne todas as instâncias (1º grau, 2º grau...) numa linha do tempo única, indica o grau de cada andamento e completa partes e advogados com as publicações do DJEN. Avisa quando o DataJud está desatualizado ou respondeu de forma incompleta.
+- `listar_movimentacoes` - andamentos de todas as instâncias, do mais recente para o mais antigo.
+- `resumir_andamento` - dados do processo prontos para o assistente resumir.
+- `monitorar_processo` - diz se o processo teve atualização desde uma data.
+- `listar_processos_monitorados` - processos com dados salvos localmente.
 
-A proposta é ser uma vertical processual: transformar consultas judiciais fragmentadas em **tools seguras, componíveis e prontas para agentes** - com cálculo de prazos em dias úteis conforme o CPC, monitoramento de andamentos e acesso ao Domicílio Judicial Eletrônico.
+**Publicações e intimações (DJEN)** - somente leitura, sem efeito jurídico
 
----
+- `buscar_comunicacoes_djen` - publicações por OAB, advogado, parte, número do processo, tribunal e período, com o texto completo, partes, advogados, link do documento e certidão em PDF.
+- `processos_por_parte_djen` - descobre os processos de uma pessoa ou empresa pelo nome.
 
-## Ferramentas disponíveis
+**Prazos e apoio**
 
-O servidor registra **11 tools** e **1 resource** (ver `src/juris_br_mcp/server.py`).
+- `calcular_proximo_prazo` - prazo em dias úteis com feriados e recesso forense (arts. 219, 220 e 224 do CPC).
+- `listar_tribunais` - siglas aceitas pelas demais ferramentas.
 
-### Consulta e monitoramento de processos
+**Domicílio Judicial Eletrônico** - opcional, exige credenciais próprias do DJe
 
-| Ferramenta | Descrição | Fonte |
-|------------|-----------|-------|
-| `buscar_processo_por_numero` | Consulta completa de processo pelo número CNJ (NNNNNNN-DD.AAAA.J.TT.OOOO, com dígito verificador conferido). Consolida todas as instâncias (1º grau, 2º grau...), marca o grau de cada movimentação, alerta quando o DataJud está desatualizado ou respondeu de forma parcial e completa partes e advogados pelo DJEN | DataJud CNJ + DJEN |
-| `listar_movimentacoes` | Histórico de andamentos de todas as instâncias, do mais recente ao mais antigo | DataJud CNJ |
-| `resumir_andamento` | Dados do processo mais instrução de resumo para o modelo de linguagem | DataJud CNJ |
-| `monitorar_processo` | Informa se houve atualização desde uma data e a data da última atualização (polling, sem gravar snapshot) | DataJud CNJ |
-| `listar_processos_monitorados` | Lista processos com snapshot gravado (memória e disco). Nesta versão nenhuma tool de consulta grava snapshot, então a lista normalmente vem vazia | Local |
+- `listar_intimacoes` - comunicações recebidas no Domicílio.
+- `confirmar_leitura_intimacao` - **tem efeito jurídico real e inicia prazo.** Funciona em modo de simulação por padrão e só confirma com dupla autorização explícita.
 
-### Publicações e intimações (DJEN)
+### Limites que vale conhecer
 
-API pública do Diário de Justiça Eletrônico Nacional (Comunica PJe/CNJ), sem chave. Somente leitura, sem efeito jurídico.
-
-| Ferramenta | Descrição | Fonte |
-|------------|-----------|-------|
-| `buscar_comunicacoes_djen` | Publicações e intimações por OAB, advogado, parte, número do processo, tribunal e período. Traz o texto da publicação, partes, advogados com OAB, link do documento e URL da certidão em PDF | DJEN |
-| `processos_por_parte_djen` | Descobre processos de uma pessoa ou empresa pelo nome, agrupando as publicações por número. Só encontra processos que tiveram publicação no DJEN; homônimos podem aparecer | DJEN |
-
-> **DataJud x DJEN:** o DataJud traz metadados e movimentações, mas não traz partes nem o texto dos atos. O DJEN traz o texto das publicações, as partes e os advogados. Os dois se complementam.
-
-### Cálculo de prazos processuais
-
-| Ferramenta | Descrição | Referência |
-|------------|-----------|------------|
-| `calcular_proximo_prazo` | Cálculo de prazo em dias úteis com recesso forense e feriados nacionais (art. 219, 220 e 224 CPC). Feriados estaduais só entram com `uf` informada | Offline com `data_intimacao_iso`; sem ela, consulta o DataJud para usar a última movimentação |
-
-### Referência de tribunais
-
-| Ferramenta | Descrição | Fonte |
-|------------|-----------|-------|
-| `listar_tribunais` | Lista as 92 siglas cadastradas no servidor (Portaria CNJ 160/2020) | Offline |
-
-### Domicílio Judicial Eletrônico (opcional)
-
-Exigem credenciais próprias do DJe (`DJE_CLIENT_ID`, `DJE_CLIENT_SECRET`, `DJE_BEHALF_OF_CPF`).
-
-| Ferramenta | Descrição | Fonte |
-|------------|-----------|-------|
-| `listar_intimacoes` | Lista comunicações recebidas no DJe. Somente leitura; conteúdo de intimações sigilosas é suprimido | DJe (API Comunica) |
-| `confirmar_leitura_intimacao` | Confirma leitura de intimação. **Tem efeito jurídico real e inicia prazo.** Funciona em dry-run por padrão e só confirma com `confirmar=True` e `DJE_PERMITIR_CONFIRMACAO_LEITURA=true` | DJe (API Comunica) |
-
-### Resource MCP
-
-| Resource | Descrição |
-|----------|-----------|
-| `processo://{numero}/snapshot` | Lê o snapshot gravado de um processo, se existir. Como `buscar_processo_por_numero` e `monitorar_processo` não gravam snapshot, nesta versão ele responde que não há snapshot disponível |
+- O DataJud **não informa partes** e pode ter de 1 a 7 dias de atraso em relação ao portal do tribunal. As partes vêm do DJEN.
+- O DJEN só tem processos que tiveram **alguma publicação**. A busca por nome pode trazer **homônimos**: confira partes e advogados antes de concluir.
+- Processos em **segredo de justiça** não aparecem em nenhuma das duas bases.
+- Quando o DataJud está sobrecarregado, as consultas ficam lentas (até alguns minutos). Nesses casos, o servidor informa a indisponibilidade em vez de responder "processo não encontrado".
 
 ---
 
 ## Instalação
 
-Pré-requisito: [uv](https://docs.astral.sh/uv/) (gerenciador de pacotes Python).
+É preciso ter o [uv](https://docs.astral.sh/uv/) instalado:
 
-```bash
-# macOS / Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
+```powershell
 # Windows (PowerShell)
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-### Direto do GitHub (sem clonar)
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-O `uvx` baixa e executa o servidor em ambiente isolado:
+Depois, escolha uma das formas abaixo.
+
+**Direto do GitHub** - o `uvx` baixa e executa o servidor, sem clonar nada:
 
 ```bash
 uvx --from git+https://github.com/andrecccruz/juris-br-mcp juris-br-mcp
 ```
 
-Para atualizar para a versão mais recente: `uvx --refresh --from git+https://github.com/andrecccruz/juris-br-mcp juris-br-mcp`.
-
-### A partir do código-fonte
+**Clonando o repositório** - melhor se você pretende alterar o código:
 
 ```bash
 git clone https://github.com/andrecccruz/juris-br-mcp.git
 cd juris-br-mcp
 uv sync
-uv run juris-br-mcp
 ```
 
 ---
 
-## Configuração por cliente MCP
-
-A variável `DATAJUD_API_KEY` é opcional: por padrão o servidor usa a chave pública vigente divulgada pelo CNJ em [datajud-wiki.cnj.jus.br](https://datajud-wiki.cnj.jus.br/api-publica/acesso/). Como o CNJ pode trocá-la a qualquer momento, use a variável para substituí-la quando necessário. O DJEN não exige chave.
+## Ligando ao Claude
 
 ### Claude Desktop
 
-Em **Configurações → Desenvolvedor → Editar configuração**, ou direto no arquivo `%APPDATA%\Claude\claude_desktop_config.json` (Windows) / `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+Abra **Configurações → Desenvolvedor → Editar configuração** e acrescente o servidor em `mcpServers`:
 
 ```json
 {
@@ -145,7 +94,7 @@ Em **Configurações → Desenvolvedor → Editar configuração**, ou direto no
 }
 ```
 
-Usando um clone local (recomendado se você for alterar o código):
+Se você clonou o repositório, aponte para a pasta dele:
 
 ```json
 {
@@ -158,50 +107,25 @@ Usando um clone local (recomendado se você for alterar o código):
 }
 ```
 
-> **Windows:** se o Claude Desktop não encontrar `uv`/`uvx`, use o caminho completo do executável, por exemplo `C:\\Users\\SEU_USUARIO\\.local\\bin\\uvx.exe`.
+Feche o Claude Desktop por completo (inclusive pelo ícone perto do relógio) e abra de novo. O servidor deve aparecer como **running** na aba Desenvolvedor.
 
-Feche o Claude Desktop por completo (inclusive o ícone na bandeja do sistema) e abra de novo. O servidor aparece como **running** na aba Desenvolvedor.
+> No Windows, se o Claude Desktop não encontrar o `uv` ou o `uvx`, informe o caminho completo, por exemplo `C:\\Users\\SEU_USUARIO\\.local\\bin\\uv.exe`.
 
-### Claude Code (CLI)
+### Claude Code
 
 ```bash
 claude mcp add juris-br -- uvx --from git+https://github.com/andrecccruz/juris-br-mcp juris-br-mcp
 ```
 
-### Cursor / `.mcp.json`
+### Outros clientes
 
-Crie ou edite `.cursor/mcp.json` (ou `.mcp.json` na raiz do projeto):
-
-```json
-{
-  "mcpServers": {
-    "juris-br": {
-      "command": "uvx",
-      "args": ["--from", "git+https://github.com/andrecccruz/juris-br-mcp", "juris-br-mcp"]
-    }
-  }
-}
-```
+Qualquer cliente MCP que execute servidores via `stdio` funciona com o mesmo comando e os mesmos argumentos do Claude Desktop.
 
 ---
 
-## Variáveis de ambiente
+## Usando sem o Claude
 
-| Variável | Descrição | Padrão |
-|----------|-----------|--------|
-| `DATAJUD_API_KEY` | Substitui a chave pública padrão do DataJud CNJ | chave pública vigente do CNJ |
-| `JURIDICO_LOG_LEVEL` | Nível de log: `DEBUG`, `INFO`, `WARNING` | `INFO` |
-| `JURIDICO_SNAPSHOT_DIR` | Diretório dos snapshots gravados. Use `memoria` para não gravar em disco | `~/.juris-br-mcp/snapshots` |
-| `JURIDICO_HTTP_TIMEOUT` | Timeout em segundos para chamadas HTTP | `30` |
-| `DATAJUD_TIMEOUT` | Timeout em segundos das consultas ao DataJud (sobrecarregado, ele leva 30-45s) | `60` |
-
-Veja todas em [`.env.example`](.env.example).
-
----
-
-## Uso sem cliente MCP
-
-As tools são funções Python comuns e podem ser chamadas direto, sem passar por um modelo de linguagem (sem gastar tokens). Veja [`examples/consulta_direta.py`](examples/consulta_direta.py):
+As ferramentas são funções Python comuns. Dá para chamá-las de scripts, planilhas ou agendadores sem passar por um modelo de linguagem, e portanto sem gastar tokens. O arquivo [`examples/consulta_direta.py`](examples/consulta_direta.py) mostra como:
 
 ```bash
 uv run python examples/consulta_direta.py processo 0701300-13.2011.8.26.0020
@@ -209,77 +133,43 @@ uv run python examples/consulta_direta.py oab 123456 SP 2026-11-01
 uv run python examples/consulta_direta.py parte "NOME COMPLETO DA PARTE" TRT2
 ```
 
----
-
-## Arquitetura
-
-```
-Claude / GPT / Cursor / qualquer cliente MCP
-              |
-              | Model Context Protocol (stdio)
-              v
-         juris-br-mcp
-              |
-    +---------+---------+-----------+----------+-----------+
-    |         |         |           |          |           |
- Processos  Movim.   Resumo    Monitoram.  Prazos    Publicações
-    |         |         |           |          |           |
-    v         v         v           v          v           v
- DataJud   DataJud   DataJud    DataJud   Calendário     DJEN
- + DJEN      CNJ       CNJ        CNJ      forense    (Comunica PJe)
- (partes)                                  offline
-```
-
-**Fontes de dados:**
-- [DataJud CNJ](https://datajud-wiki.cnj.jus.br/) - base unificada de dados judiciais (Portaria CNJ 160/2020)
-- [DJEN / Comunica PJe](https://comunica.pje.jus.br/) - publicações e intimações do Diário de Justiça Eletrônico Nacional (API pública)
-- Calendário forense nacional e estadual - processado offline para cálculo de prazos (CPC art. 219/220/224)
-
-**Confiabilidade do DataJud:** quando o cluster do DataJud está sobrecarregado, ele pode responder HTTP 200 com parte dos índices falhando. O juris-br-mcp detecta isso: um resultado parcial vazio é reportado como indisponibilidade (e não como "processo não encontrado"), e um resultado parcial com dados traz `alerta_resultado_incompleto`.
+A saída é o mesmo JSON que o Claude recebe.
 
 ---
 
-## Roadmap
+## Configurações opcionais
 
-- [x] **0.1.0** - Projeto original (mcp-juridico-brasil): processo, movimentações, resumo, monitoramento, prazos, tribunais e DJe
-- [x] **0.2.0** - DJEN (publicações, partes, descoberta por nome), consolidação de instâncias, detecção de resposta parcial do DataJud, dígito verificador CNJ, persistência de snapshots
-- [ ] Busca no DataJud por classe, órgão julgador, assunto e período
-- [ ] Filtro de "outra parte" na descoberta por nome (ex.: ex-funcionário x empresa)
-- [ ] Jurisprudência e súmulas (LexML)
-- [ ] Cálculos judiciais com índices oficiais (BACEN/IBGE)
+Nenhuma é obrigatória. A lista completa está em [`.env.example`](.env.example).
 
----
-
-## Privacidade e LGPD
-
-> **Atenção:** as tools de consulta processual acessam exclusivamente dados públicos disponibilizados pelo DataJud CNJ (Resolução CNJ 331/2020) e pelo DJEN; processos em **segredo de justiça** não são retornados. As tools do DJEN retornam nomes de partes publicados oficialmente; a busca por nome pode trazer homônimos e deve ser conferida antes de qualquer conclusão. As tools opcionais do DJe são diferentes: com credenciais do próprio advogado, acessam comunicações processuais não públicas recebidas no Domicílio Judicial Eletrônico, com o conteúdo de intimações sigilosas suprimido, e `confirmar_leitura_intimacao` pode produzir efeito jurídico. Nenhum dado processual é enviado a servidores do projeto: tudo roda no ambiente local do usuário. O uso das ferramentas é de responsabilidade do profissional habilitado, em conformidade com a LGPD (Lei 13.709/2018), a Resolução CNJ 647/2025 e a OAB Recomendação 001/2024. Estas ferramentas não constituem consultoria jurídica.
+| Variável | Para que serve | Padrão |
+|----------|----------------|--------|
+| `DATAJUD_API_KEY` | Trocar a chave pública do DataJud, caso o CNJ a altere ([wiki do DataJud](https://datajud-wiki.cnj.jus.br/api-publica/acesso/)) | chave pública atual |
+| `DATAJUD_TIMEOUT` | Tempo máximo de espera por consulta ao DataJud, em segundos | `60` |
+| `JURIDICO_SNAPSHOT_DIR` | Pasta dos dados de monitoramento (`memoria` para não gravar em disco) | `~/.juris-br-mcp/snapshots` |
+| `JURIDICO_LOG_LEVEL` | Nível de detalhe dos logs | `INFO` |
 
 ---
 
-## Contribuindo
+## Fontes
 
-Contribuições são bem-vindas! Veja [CONTRIBUTING.md](CONTRIBUTING.md).
+- [DataJud](https://datajud-wiki.cnj.jus.br/) - API pública do CNJ (Portaria CNJ 160/2020).
+- [DJEN / Comunica PJe](https://comunica.pje.jus.br/) - API pública do Diário de Justiça Eletrônico Nacional.
+- Calendário forense nacional e estadual, calculado localmente.
 
-```bash
-git clone https://github.com/andrecccruz/juris-br-mcp.git
-cd juris-br-mcp
-uv sync --extra dev
+---
 
-uv run pytest
-uv run ruff check src tests
-uv run mypy src
-```
+## Privacidade e responsabilidade
 
-Cada módulo segue o padrão `client.py` + `tools.py`, tornando simples adicionar novas fontes processuais.
+As consultas usam apenas dados públicos do DataJud e do DJEN, e nada é enviado a servidores deste projeto. As ferramentas opcionais do Domicílio Judicial Eletrônico usam credenciais do próprio advogado, e `confirmar_leitura_intimacao` pode produzir efeito jurídico.
+
+O uso é de responsabilidade do profissional habilitado, em conformidade com a LGPD (Lei 13.709/2018), a Resolução CNJ 647/2025 e a Recomendação OAB 001/2024. Estas ferramentas não constituem consultoria jurídica.
 
 ---
 
 ## Créditos
 
-O juris-br-mcp é derivado do [mcp-juridico-brasil](https://github.com/DeHor-Labs/mcp-juridico-brasil), criado por **Nikolas de Hor** e distribuído sob licença MIT. A arquitetura, as tools de prazo, o DJe e a base do cliente DataJud vêm do projeto original.
-
----
+Este projeto é derivado do [mcp-juridico-brasil](https://github.com/DeHor-Labs/mcp-juridico-brasil), criado por **Nikolas de Hor** e distribuído sob licença MIT. A estrutura do servidor, o cálculo de prazos, a integração com o Domicílio Judicial Eletrônico e a base do cliente DataJud vêm do projeto original. As mudanças feitas aqui estão no [CHANGELOG](CHANGELOG.md).
 
 ## Licença
 
-MIT - veja [LICENSE](LICENSE) para detalhes.
+MIT - veja [LICENSE](LICENSE).
