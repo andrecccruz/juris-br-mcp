@@ -1,0 +1,42 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.andrecccruz/juris-br-mcp",
+  "title": "Juris BR MCP",
+  "description": "Processos judiciais brasileiros via DataJud CNJ e DJEN: consulta, andamentos, publicações, partes e prazos em dias úteis",
+  "websiteUrl": "https://github.com/andrecccruz/juris-br-mcp",
+  "version": "0.2.0",
+  "repository": {
+    "url": "https://github.com/andrecccruz/juris-br-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "juris-br-mcp",
+      "version": "0.2.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "tags": [
+        "juridico",
+        "judicial",
+        "brasil",
+        "brazil",
+        "datajud",
+        "cnj",
+        "processo",
+        "advocacia",
+        "legaltech",
+        "prazo",
+        "intimacao",
+        "monitoramento"
+      ]
+    }
+  }
+}

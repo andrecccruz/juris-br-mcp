@@ -1,0 +1,89 @@
+"""Tool MCP: monitorar_processo.
+
+Fase 2: verifica se houve atualizacao desde uma data de referencia.
+Fase 3 (provider comercial): substituir polling por webhook push.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from juris_br_mcp._core import JuridicoValidationError, get_logger
+from juris_br_mcp.datajud.provider import DataJudProvider
+from juris_br_mcp.shared.validators import (
+    diagnosticar_numero_cnj,
+    normalizar_numero_cnj,
+    validar_numero_cnj,
+)
+
+logger = get_logger(__name__)
+_provider = DataJudProvider()
+
+
+async def monitorar_processo(
+    numero_processo: str,
+    tribunal: str,
+    desde_iso: str,
+) -> dict[str, object]:
+    """Verifica se um processo teve atualização após a data informada.
+
+    Implementação Fase 2: polling via DataJud (sem tempo real).
+    Fase 3 substituirá por notificação push via provider comercial.
+
+    Args:
+        numero_processo: Número no formato CNJ.
+        tribunal: Sigla do tribunal (obrigatória para monitoramento).
+        desde_iso: Data/hora de referência em formato ISO 8601
+                   (ex: '2024-01-15T08:00:00').
+
+    Returns:
+        Dicionário indicando se houve atualização e a data da última.
+    """
+    if not validar_numero_cnj(numero_processo):
+        raise JuridicoValidationError(
+            field="numero_processo",
+            value=numero_processo,
+            reason=diagnosticar_numero_cnj(numero_processo) or "Número CNJ inválido.",
+        )
+
+    try:
+        datetime.fromisoformat(desde_iso.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise JuridicoValidationError(
+            field="desde_iso",
+            value=desde_iso,
+            reason="Data inválida. Use formato ISO 8601: YYYY-MM-DDTHH:MM:SS",
+        ) from exc
+
+    numero_normalizado = normalizar_numero_cnj(numero_processo)
+    logger.info(
+        "monitorar_processo_solicitado",
+        numero=numero_normalizado,
+        tribunal=tribunal,
+        desde=desde_iso,
+    )
+
+    processo = await _provider.buscar_processo(numero_normalizado, tribunal)
+    ultima = processo.data_ultima_atualizacao
+    ultima_iso = ultima.isoformat() if ultima else None
+
+    desde = datetime.fromisoformat(desde_iso.replace("Z", "+00:00"))
+    if desde.tzinfo is None:
+        desde = desde.replace(tzinfo=timezone.utc)
+    houve_atualizacao = ultima is not None and ultima > desde
+
+    return {
+        "numero_processo": numero_normalizado,
+        "tribunal": tribunal,
+        "desde": desde_iso,
+        "houve_atualizacao": houve_atualizacao,
+        "data_ultima_atualizacao_datajud": ultima_iso,
+        "aviso_defasagem": (
+            "O DataJud pode ter atraso de T+1 a T+7 dias. "
+            "Para monitoramento de prazos críticos, use um provider comercial "
+            "com webhook (Fase 3) ou acesse diretamente o portal do tribunal."
+        ),
+    }
+
+
+__all__ = ["monitorar_processo"]
